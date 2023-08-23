@@ -5,6 +5,8 @@ import { ApprovedData } from "./approved-data/approved-data";
 import { ChangeDataDto } from "./dto/change-data.dto";
 import { Response } from "express";
 import { Public } from "../decorators/public/public.decorator";
+import { ApiBody } from "@nestjs/swagger";
+import { Account } from "./models/accounts.model";
 
 @Controller("accounts")
 export class AccountsController {
