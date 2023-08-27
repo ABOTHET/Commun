@@ -32,7 +32,7 @@ export class AuthController {
       return;
     }
     await this.authService.logout(payload.id);
-    res.clearCookie("refresh_token");
+    res.clearCookie("refresh_token", { httpOnly: true  });
   }
 
   @Post("refresh")

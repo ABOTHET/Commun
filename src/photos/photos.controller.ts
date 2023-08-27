@@ -5,16 +5,17 @@ import {
   HttpStatus,
   Param,
   ParseFilePipeBuilder,
-  Post,
-  StreamableFile,
+  Post, Query,
+  StreamableFile, UploadedFile,
   UploadedFiles,
   UseInterceptors
 } from "@nestjs/common";
-import { FilesInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { Payload as Pd } from "../jwt-refresh-tokens/payload/payload";
 import { Payload } from "../decorators/account/payload.decorator";
 import { PhotosService } from "./photos.service";
 import { createReadStream } from "fs";
+import { Public } from "../decorators/public/public.decorator";
 
 @Controller("photos")
 export class PhotosController {
@@ -23,31 +24,47 @@ export class PhotosController {
 
   @Post()
   @UseInterceptors(FilesInterceptor("photos", 10))
-  async uploadFiles(@UploadedFiles(
+  async uploadPhotos(@UploadedFiles(
     new ParseFilePipeBuilder()
       .addFileTypeValidator({
-        fileType: "png"
+        fileType: "jpeg"
       })
       .build({
         errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY
       })
   ) files: Array<Express.Multer.File>, @Payload() payload: Pd) {
-    const email = payload.email;
-    const account_id = payload.id;
-    await this.photosService.addPhotos(account_id, email, files);
+    await this.photosService.uploadPhotos(files, payload.email, payload.id);
   }
 
-  @Get("/:id")
-  @Header("Content-Type", "image/webp")
-  async findPhotoById(@Param("id") id: string) {
-    // в папке "/photos" отсчёт идёт с 0, а в БД отсчёт идёт с 1, поэтому ув.
-    const number = Number(id) + 1;
-    const photo = await this.photosService.findPhotoById(number);
-    if (!photo) {
-      return;
-    }
-    const file = createReadStream(photo.path);
+  @Get(":id")
+  @Public()
+  @Header('Content-Type', 'image/webp')
+  async getAvatarByAccountId(@Param("id") id: number) {
+    let path: string = await this.photosService.getAvatarByAccountId(id);
+    const file = createReadStream(path);
     return new StreamableFile(file);
+  }
+
+  /*@Get("all/:id")
+  @Header('Content-Type', 'image/webp')
+  async getPhotosByAccountId(@Param("id") id: number) {
+    let photos = await this.photosService.getPhotosByAccountId(id);
+    const file = createReadStream(path);
+    return new StreamableFile(file);
+  }*/
+
+  @Post('avatar')
+  @UseInterceptors(FileInterceptor('avatar'))
+  async uploadAvatar(@UploadedFile(
+    new ParseFilePipeBuilder()
+      .addFileTypeValidator({
+        fileType: "jpeg"
+      })
+      .build({
+        errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY
+      })
+  ) file: Express.Multer.File, @Payload() payload: Pd) {
+    await this.photosService.uploadAvatar(file, payload.email, payload.id);
   }
 
 }

@@ -1,4 +1,14 @@
-import { BelongsToMany, Column, DataType, HasMany, HasOne, Model, Table } from "sequelize-typescript";
+import {
+  BelongsTo,
+  BelongsToMany,
+  Column,
+  DataType,
+  ForeignKey,
+  HasMany,
+  HasOne,
+  Model,
+  Table
+} from "sequelize-typescript";
 import { InferAttributes, InferCreationAttributes } from "sequelize";
 import { RolesRelationship } from "../../roles/models/roles-relationship.model";
 import { Role } from "../../roles/models/roles.model";
@@ -7,7 +17,7 @@ import { Photo } from "../../photos/models/photos.model";
 import { Post } from "../../posts/models/posts.model";
 
 @Table({ tableName: "accounts", updatedAt: false, createdAt: true, deletedAt: false })
-export class Account extends Model<InferAttributes<Account, { omit: "id" }>, InferCreationAttributes<Account>> {
+export class Account extends Model<InferAttributes<Account, {}>, InferCreationAttributes<Account>> {
   @Column({ type: DataType.INTEGER, primaryKey: true, autoIncrement: true })
   id: number;
   @Column({ type: DataType.STRING, unique: true, allowNull: false })
@@ -20,6 +30,9 @@ export class Account extends Model<InferAttributes<Account, { omit: "id" }>, Inf
   surname: string;
   @Column({ type: DataType.SMALLINT, allowNull: false })
   age: number;
+  @ForeignKey(() => Photo)
+  @Column({ type: DataType.INTEGER, allowNull: true })
+  avatar_id: number;
   @BelongsToMany(() => Role, () => RolesRelationship)
   roles: Role[];
   @HasOne(() => JwtRefreshToken)
@@ -28,4 +41,6 @@ export class Account extends Model<InferAttributes<Account, { omit: "id" }>, Inf
   photos: Photo[];
   @HasMany(() => Post)
   posts: Post[];
+  @BelongsTo(() => Photo)
+  avatar: number;
 }

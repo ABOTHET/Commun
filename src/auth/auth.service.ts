@@ -34,7 +34,7 @@ export class AuthService {
   async refresh(refresh_token: string) {
     const isValid = await this.tokensService.verifyRefreshToken(refresh_token);
     if (!isValid) {
-      throw new UnauthorizedException(HttpStatus.BAD_REQUEST, "Вы не авторизованы");
+      throw new UnauthorizedException(HttpStatus.BAD_REQUEST, "Unauthorized");
     }
     const account = await this.accountsService.findAccountById(isValid.id);
     const tokens = await this.tokensService.generateTokens(account);

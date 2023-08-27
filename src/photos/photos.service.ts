@@ -5,91 +5,127 @@ import * as fs from "fs";
 import { Express } from "express";
 import * as sharp from "sharp";
 import { CreatePhotosDto } from "./dto/create-photos.dto";
+import { AccountsService } from "../accounts/accounts.service";
+import * as path from "path";
+import { env } from "process";
 
 @Injectable()
 export class PhotosService {
 
-  pathToDir: string = "";
+  pathToPhotos: string;
+  counterName: string = "counter.txt";
 
-  constructor(@InjectModel(Photo) private photosRepository: typeof Photo) {
-    let dir = __dirname;
-    let pos = 0;
-    let path = "";
-    // Шаги назад (1 = 2 шага назад -> ../..)
-    let num = 1;
-    for (let i = dir.length - 1; i >= 0; i--) {
-      if (dir[i] != "\\") {
-        continue;
-      }
-      pos = i;
-      if (num == 0) {
-        break;
-      }
-      num -= 1;
-    }
-    for (let i = 0; i <= pos; i++) {
-      path += dir[i];
-    }
-    path += "assets/photos";
-    if (!fs.existsSync(path)) {
-      try {
-        fs.mkdirSync(path, { recursive: true });
-      } catch (e) {
-        console.log(e);
-      }
-    }
-    this.pathToDir = path;
+  constructor(@InjectModel(Photo) private photosRepository: typeof Photo, private accountsService: AccountsService) {
+    const pathToProject = this.stepBackNSteps(2, __dirname);
+    this.pathToPhotos = path.join(pathToProject, "assets", env["PHOTO_FOLDER"]);
+    this.createFolder(this.pathToPhotos);
   }
 
-  async addPhotos(account_id: number, email: string, files: Array<Express.Multer.File>) {
-    const path = this.pathToDir + `\\${email}`;
-    if (!fs.existsSync(path)) {
-      try {
-        fs.mkdirSync(path, { recursive: true });
-      } catch (e) {
-        console.log(e);
-      }
+  private stepBackNSteps(steps: number, pathArg: string) {
+    let result: string = pathArg;
+    for (let i = 0; i < steps; i++) {
+      result = path.join(result, "..");
     }
-    let counter: number;
+    return result;
+  }
+
+  async uploadPhotos(files: Array<Express.Multer.File>, email: string, account_id: number) {
+    const pathArg = path.join(this.pathToPhotos, email);
+    this.createFolder(pathArg);
+    let counter: string;
     try {
-      fs.accessSync(path + "\\counter.txt", fs.constants.F_OK);
+      counter = this.getCounter(path.join(pathArg, this.counterName));
     } catch (e) {
-      try {
-        fs.writeFileSync(path + "\\counter.txt", "0", "utf-8");
-      } catch (e) {
-        console.log(e);
-      }
+      counter = this.createCounterFile(path.join(pathArg, this.counterName));
     }
-    try {
-      let data = fs.readFileSync(path + "\\counter.txt", "utf-8");
-      counter = Number(data);
-    } catch (e) {
-      console.log(e);
+    let num: number = parseInt(counter);
+    for (let i = 1; i <= files.length; i++) {
+      const photo = await this.getWebpPhoto(files[i - 1]);
+      sharp(photo).toFile(path.join(pathArg, num.toString() + ".webp"),
+        (err, info) => { console.error(err); });
+      await this.savePathInDB(path.join(pathArg, num.toString()) + ".webp", account_id);
+      num++;
     }
-    files.forEach((photo) => {
-      const pathToPhoto = path + `\\${counter}.webp`;
-      sharp(photo.buffer).toFile(pathToPhoto, (err, info) => {});
-      counter++;
-      const createPhotoDto = { ...new CreatePhotosDto(account_id, pathToPhoto) };
-      (async () => {
-        await this.photosRepository.create(createPhotoDto);
-      })();
-    });
+    this.setCounter(path.join(pathArg, this.counterName), num);
+  }
+
+  async getWebpPhoto(file: Express.Multer.File) {
+    const buffer = await sharp(file.buffer).toFormat('webp').toBuffer();
+    return buffer;
+  }
+
+
+  async uploadAvatar(file: Express.Multer.File, email: string, account_id: number) {
+    const pathArg = path.join(this.pathToPhotos, email);
+    this.createFolder(pathArg);
+    let counter: string;
     try {
-      fs.writeFileSync(path + "\\counter.txt", counter.toString(), "utf-8");
+      counter = this.getCounter(path.join(pathArg, this.counterName));
     } catch (e) {
-      console.log(e);
+      counter = this.createCounterFile(path.join(pathArg, this.counterName));
+    }
+    let num: number = parseInt(counter);
+    const photo = await this.getWebpPhoto(file);
+    sharp(photo).toFile(path.join(pathArg, num.toString() + ".webp"),
+      (err, info) => { console.error(err); });
+    const photoFromDB = await this.savePathInDB(path.join(pathArg, num.toString())  + ".webp", account_id);
+    num++;
+    this.setCounter(path.join(pathArg, this.counterName), num);
+    const account = await this.accountsService.findAccountById(account_id);
+    await account.$set('avatar', [photoFromDB.id]);
+  }
+
+  private setCounter(path: string, number: number) {
+    try {
+      fs.writeFileSync(path, number.toString());
+    } catch (err) {
+      console.error(err);
     }
   }
 
-  async findPhotoById(id: number) {
-    const photo = await this.photosRepository.findByPk(id);
+  private createCounterFile(path: string) {
+    try {
+      fs.writeFileSync(path, "1");
+      return "1";
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  private getCounter(path: string) {
+    try {
+      const data = fs.readFileSync(path, "utf-8");
+      return data;
+    } catch (err) {
+      throw new Error(err);
+    }
+  }
+
+  private createFolder(pathArg: string) {
+    if (!fs.existsSync(pathArg)) {
+      try {
+        fs.mkdirSync(pathArg, { recursive: true });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+
+  async savePathInDB(path: string, account_id: number) {
+    const photo = await this.photosRepository.create({ path: path, account_id: account_id });
     return photo;
   }
 
-  async removePhotoById(id: number) {
-    await this.photosRepository.destroy({where: {id: id}});
+  async getAvatarByAccountId(account_id: number) {
+    const account = await this.accountsService.findAccountById(account_id);
+    const photo_id =  account.avatar_id;
+    const photo = await this.photosRepository.findByPk(photo_id);
+    return photo.path;
   }
 
+  async getPhotosByAccountId(account_id: number) {
+    const photos = await this.photosRepository.findAll({where: {account_id: account_id}});
+    return photos;
+  }
 
 }

@@ -1,4 +1,4 @@
-import { BelongsTo, Column, DataType, ForeignKey, Model, Table } from "sequelize-typescript";
+import { BelongsTo, Column, DataType, ForeignKey, HasOne, Model, Table } from "sequelize-typescript";
 import { InferAttributes, InferCreationAttributes } from "sequelize";
 import { Account } from "../../accounts/models/accounts.model";
 
@@ -13,4 +13,6 @@ export class Photo extends Model<InferAttributes<Photo, {}>, InferCreationAttrib
   path: string;
   @BelongsTo(() => Account)
   account: Account;
+  @HasOne(() => Account)
+  accountAvatar: Account;
 }
